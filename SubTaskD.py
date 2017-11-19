@@ -182,12 +182,61 @@ def feature_emoticon_exists_binary(tweet_text):
     else:
         return 0
 
-def DataMatrix(ngram_features,character_gram_features,general_features,categories):
+def get_pos_tags_and_hashtags(tweetText):
+    tf = tempfile.NamedTemporaryFile(delete=False)
+    with codecs.open(tf.name, 'w', encoding='utf8') as out:
+        for i in tweetText:
+            #out.write("%s\n"%i.decode('utf-8'))
+            out.write("%s\n"%i)
+    com = "/home/nishal/ALL_FILES_HERE/CS_COURSES/NLP/SemEval_Task4/ark-tweet-nlp-0.3.2/runTagger.sh %s"%tf.name
+    op= subprocess.check_output(com.split())
+    op = op.splitlines()
+    pos_text = [x.split("\t")[0].split() for x in op]
+    pos = [x.split("\t")[1].split() for x in op]
+    different_pos_tags = list(set([x for i in pos for x in i]))
+    pos_features = []
+    for instance in pos:
+        tags = []
+        instance = Counter(instance)
+        for pos_tag in different_pos_tags:
+            try:
+                tags.append(instance[pos_tag])
+            except:
+                tags.append(0)
+        pos_features.append(np.array(tags))
+    pos_features = np.array(pos_features)
+    #print "------------\nPOS-tagging finished!\n------------\nThere are %d pos-tags (incl. hashtags). Shape: %d,%d"%(len(different_pos_tags), pos_features.shape[0],  pos_features.shape[1])
+    for key1, i in enumerate(pos_text):
+        flag = False
+        for key, j in enumerate(i):
+            i[key] = j.lower()
+            if flag:
+                if pos[key1][key] in "AVRN" :
+                    i[key]+="_NEG"
+                else:
+                    flag=False
+            if j in negation:
+                flag = True
+    os.remove(tf.name)
+    return pos, pos_features, different_pos_tags, pos_text
+
+
+def DataMatrix(ngram_features,
+               character_gram_features,
+               general_features,
+               pos,
+               pos_features,
+               different_pos_tags,
+               pos_text,
+               categories):
+    #print"LENGTH", len(ngram_features),len(character_gram_features),len(pos_features)
+    pos_features = csr_matrix(pos_features)
     Final_Features = scipy.sparse.hstack((ngram_features, 
                                           character_gram_features,
                                           general_features.as_matrix(columns=["exclamation_count","question_count",
                                                                               "exclamation_question_count","capital_and_elongated_count",
-                                                                              "positve_emoticon_count","negative_emoticon_count","emoticon_exists_binary"])), dtype=float)
+                                                                              "positve_emoticon_count","negative_emoticon_count","emoticon_exists_binary"]), 
+                                          pos_features),dtype=float)
     y=[]
     for i in range(len(categories)):
         if categories[i]=='positive':
@@ -220,6 +269,12 @@ def showMyKLD(true, pred, l):
         s.append(KLD(true[val:l[key+1]], pred[val:l[key+1]]))
     return sum(s)/len(s)
 
+
+
+
+negation = set(["never","no","nothing","nowhere","noone","none","not","havent","haven't","hasnt","hasn't","hadnt","hadn't", 
+                "cant","can't","couldnt","couldn't","shouldnt","shouldn't","wont","won't","wouldnt","wouldn't","dont","don't","doesnt","doesn't","didnt",
+                "didn't","isnt","isn't","arent","aren't","aint","ain't"])
 tokenizer = Tokenizer()
 #Load Train data
 data=pd.read_csv("/home/nishal/ALL_FILES_HERE/CS_COURSES/NLP/SemEval_Task4/semval-task4-training data/semval-task4-training data/2016-part2-subtaskBD.tsv",
@@ -249,7 +304,9 @@ data = data[data.tweet_text != "Not Available"]
 dev_data = dev_data[dev_data.tweet_text != "Not Available"]
 data = data.append(dev_data,ignore_index=True)
 data['tweet_text']=PreProcessingTweets(data['tweet_text']) #Cleaning Tweets--> remove urls,user mentions
+tweet_train,categories_train = list(data['tweet_text']),list(data['label'])
 gold_test_data['tweet_text']=PreProcessingTweets(gold_test_data['tweet_text'])
+tweet_test,categories_test = list(gold_test_data['tweet_text']),list(gold_test_data['label'])
 final_test_data['tweet_text']=PreProcessingTweets(final_test_data['tweet_text'])
 
 features = pd.DataFrame(columns=["tweet","exclamation_count","question_count",
@@ -274,6 +331,9 @@ for i in range(len(set(topic_label))):
     yo.append(num+yo[i])
 #GET FEATURES FOR TRAINING
 generalFeatures,nGram_features_train,charGram_features_train=FeatureExtraction(data['tweet_text'])
+pos1, pos_features1, different_pos_tags1, pos_text1 = get_pos_tags_and_hashtags(tweet_train+tweet_test) #Get POS of everything
+pos, pos_features, different_pos_tags, pos_text =  pos1[:len(categories_train)], pos_features1[:len(categories_train)], different_pos_tags1, pos_text1[:len(categories_train)] #Split train-test again
+pos_test, pos_features_test, different_pos_tags_test, pos_text_test = pos1[:len(categories_test)], pos_features1[:len(categories_test)], different_pos_tags1, pos_text1[:len(categories_test)] #Split train-test again
 nGram_features_train.data **= 0.9 #a-power transformation
 charGram_features_train.data **= 0.9 #a-power transformation
 
@@ -292,25 +352,35 @@ charGram_features_final_test.data **= 0.9
 x_train, y_train = DataMatrix(nGram_features_train, 
                               charGram_features_train, 
                               generalFeatures,
+                              pos,
+                              pos_features,
+                              different_pos_tags,
+                              pos_text,
                               data['label']) #Combine all  features (train)
 x_test,y_test = DataMatrix(nGram_features_test,
                            charGram_features_test,
                            generalFeatures_test,
+                           pos_test,
+                           pos_features_test, 
+                           different_pos_tags_test, 
+                           pos_text_test,
                            gold_test_data['label'])
                            
-                
+"""                
 x_final_test,y_final_test = DataMatrix(nGram_features_final_test,
                            charGram_features_final_test,
                            generalFeatures_final_test,
                            final_test_data['label'])
-for c in np.logspace(0,100): #used 100 for submission
-    clf = svm.LinearSVC(C=c, loss='squared_hinge', penalty='l2', class_weight='balanced', multi_class='crammer_singer', max_iter=4000, dual=True, tol=1e-6)
-    clf.fit(x_train, y_train)
-    print "KLD---> c---->",  showMyKLD(y_test, clf.predict(x_test),yo), c
-
 print "FINAL TEST SUBMISSION"
 for c in np.logspace(0,100): #used 100 for submission
     clf = svm.LinearSVC(C=c, loss='squared_hinge', penalty='l2', class_weight='balanced', multi_class='crammer_singer', max_iter=4000, dual=True, tol=1e-6)
     clf.fit(x_train, y_train)
     print "KLD---> c---->",  showMyKLD(y_final_test, clf.predict(x_final_test),yo), c
+    """
+for c in np.logspace(0,1): #used 100 for submission
+    clf = svm.LinearSVC(C=c, loss='squared_hinge', penalty='l2', class_weight='balanced', multi_class='crammer_singer', max_iter=4000, dual=True, tol=1e-6)
+    clf.fit(x_train, y_train)
+    print "KLD---> c---->",  showMyKLD(y_test, clf.predict(x_test),yo), c
+
+
 
