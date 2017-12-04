@@ -308,6 +308,7 @@ tweet_train,categories_train = list(data['tweet_text']),list(data['label'])
 gold_test_data['tweet_text']=PreProcessingTweets(gold_test_data['tweet_text'])
 tweet_test,categories_test = list(gold_test_data['tweet_text']),list(gold_test_data['label'])
 final_test_data['tweet_text']=PreProcessingTweets(final_test_data['tweet_text'])
+tweet_final_test=list(final_test_data['tweet_text'])
 
 features = pd.DataFrame(columns=["tweet","exclamation_count","question_count",
 "exclamation_question_count","capital_and_elongated_count","negated_context_count",
@@ -334,20 +335,24 @@ generalFeatures,nGram_features_train,charGram_features_train=FeatureExtraction(d
 pos1, pos_features1, different_pos_tags1, pos_text1 = get_pos_tags_and_hashtags(tweet_train+tweet_test) #Get POS of everything
 pos, pos_features, different_pos_tags, pos_text =  pos1[:len(categories_train)], pos_features1[:len(categories_train)], different_pos_tags1, pos_text1[:len(categories_train)] #Split train-test again
 pos_test, pos_features_test, different_pos_tags_test, pos_text_test = pos1[:len(categories_test)], pos_features1[:len(categories_test)], different_pos_tags1, pos_text1[:len(categories_test)] #Split train-test again
-nGram_features_train.data **= 0.9 #a-power transformation
-charGram_features_train.data **= 0.9 #a-power transformation
+nGram_features_train.data **= 0.7 #a-power transformation
+charGram_features_train.data **= 0.7 #a-power transformation
 
 generalFeatures_test = FeatureExtraction_test(gold_test_data['tweet_text'])
 nGram_features_test = feature_ngrams_test(gold_test_data['tweet_text'])
 charGram_features_test = feature_charGrams_test(gold_test_data['tweet_text'])
-nGram_features_test.data **= 0.9
-charGram_features_test.data **= 0.9
+nGram_features_test.data **= 0.7
+charGram_features_test.data **= 0.7
+
 
 generalFeatures_final_test = FeatureExtraction_final_test(final_test_data['tweet_text'])
 nGram_features_final_test = feature_ngrams_test(final_test_data['tweet_text'])
 charGram_features_final_test = feature_charGrams_test(final_test_data['tweet_text'])
-nGram_features_final_test.data **= 0.9
-charGram_features_final_test.data **= 0.9
+pos_final_test, pos_features_final_test, different_pos_tags_final, pos_final_test= get_pos_tags_and_hashtags(tweet_final_test) #Get POS of everything
+
+
+nGram_features_final_test.data **= 0.7
+charGram_features_final_test.data **= 0.7
 
 x_train, y_train = DataMatrix(nGram_features_train, 
                               charGram_features_train, 
@@ -365,22 +370,29 @@ x_test,y_test = DataMatrix(nGram_features_test,
                            different_pos_tags_test, 
                            pos_text_test,
                            gold_test_data['label'])
-                           
-"""                
+              
 x_final_test,y_final_test = DataMatrix(nGram_features_final_test,
                            charGram_features_final_test,
                            generalFeatures_final_test,
+                           pos_final_test,
+                           pos_features_final_test,
+                           different_pos_tags_final,
+                           pos_final_test,
                            final_test_data['label'])
 print "FINAL TEST SUBMISSION"
 for c in np.logspace(0,100): #used 100 for submission
     clf = svm.LinearSVC(C=c, loss='squared_hinge', penalty='l2', class_weight='balanced', multi_class='crammer_singer', max_iter=4000, dual=True, tol=1e-6)
     clf.fit(x_train, y_train)
-    print "KLD---> c---->",  showMyKLD(y_final_test, clf.predict(x_final_test),yo), c
+    print "KLD---> c---->",  showMyKLD(y_test, clf.predict(x_test),yo), c
+    print " FINAL TEST  --> KLD--> c-->",showMyKLD(y_final_test, clf.predict(x_final_test),yo), c
     """
-for c in np.logspace(0,1): #used 100 for submission
+for c in np.logspace(0,1): 
     clf = svm.LinearSVC(C=c, loss='squared_hinge', penalty='l2', class_weight='balanced', multi_class='crammer_singer', max_iter=4000, dual=True, tol=1e-6)
     clf.fit(x_train, y_train)
     print "KLD---> c---->",  showMyKLD(y_test, clf.predict(x_test),yo), c
-
+    
+print "FIANL TEST"
+print "KLD---> c---->",  showMyKLD(y_test, clf.predict(x_test),yo), c
+"""
 
 
